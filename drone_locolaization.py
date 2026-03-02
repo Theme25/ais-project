@@ -1,0 +1,256 @@
+"""Aruco-based drone localization with OpenCV + Kalman filter.
+
+Examples:
+  # 1) With .npy files
+  python drone_localization.py --camera-id 0 --marker-size 0.12 \
+      --camera-matrix camera_matrix.npy --dist-coeffs dist_coeffs.npy
+
+  # 2) With MATLAB-generated cameraIntrinsics values (provided in this repo)
+  python drone_localization.py --camera-id 0 --marker-size 0.12 --use-matlab-intrinsics
+"""
+
+from __future__ import annotations
+
+import argparse
+import time
+from dataclasses import dataclass
+
+import cv2
+import numpy as np
+
+
+ARUCO_DICT_MAP = {
+    "DICT_4X4_50": cv2.aruco.DICT_4X4_50,
+    "DICT_4X4_100": cv2.aruco.DICT_4X4_100,
+    "DICT_5X5_50": cv2.aruco.DICT_5X5_50,
+    "DICT_6X6_50": cv2.aruco.DICT_6X6_50,
+    "DICT_7X7_50": cv2.aruco.DICT_7X7_50,
+}
+
+# From user's MATLAB codegen cameraIntrinsics.cpp / .h
+MATLAB_FOCAL_LENGTH = (603.816409588989, 600.17202631038163)
+MATLAB_PRINCIPAL_POINT = (388.676982266589, 240.555861086624)
+MATLAB_RADIAL = (0.043102806701415232, -0.1082637934138599)
+MATLAB_TANGENTIAL = (0.0, 0.0)
+MATLAB_IMAGE_SIZE = (480.0, 768.0)  # [rows, cols]
+
+
+@dataclass
+class PoseEstimate:
+    marker_id: int
+    rvec: np.ndarray
+    tvec: np.ndarray
+
+
+def build_kalman_filter(dt: float = 1.0 / 30.0) -> cv2.KalmanFilter:
+    """6-state (x,y,z,vx,vy,vz), 3-measurement (x,y,z) Kalman filter."""
+    kf = cv2.KalmanFilter(6, 3)
+
+    kf.transitionMatrix = np.array(
+        [
+            [1, 0, 0, dt, 0, 0],
+            [0, 1, 0, 0, dt, 0],
+            [0, 0, 1, 0, 0, dt],
+            [0, 0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 1, 0],
+            [0, 0, 0, 0, 0, 1],
+        ],
+        dtype=np.float32,
+    )
+
+    kf.measurementMatrix = np.array(
+        [
+            [1, 0, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0],
+        ],
+        dtype=np.float32,
+    )
+
+    kf.processNoiseCov = np.eye(6, dtype=np.float32) * 1e-2
+    kf.measurementNoiseCov = np.eye(3, dtype=np.float32) * 5e-2
+    kf.errorCovPost = np.eye(6, dtype=np.float32)
+    kf.statePost = np.zeros((6, 1), dtype=np.float32)
+    return kf
+
+
+def matlab_intrinsics_to_opencv() -> tuple[np.ndarray, np.ndarray, tuple[int, int]]:
+    """Convert MATLAB cameraIntrinsics values to OpenCV calibration arrays.
+
+    Returns:
+        camera_matrix: shape (3,3)
+        dist_coeffs: shape (1,5) in OpenCV order [k1, k2, p1, p2, k3]
+        image_size_hw: (height, width)
+    """
+    fx, fy = MATLAB_FOCAL_LENGTH
+    cx, cy = MATLAB_PRINCIPAL_POINT
+    k1, k2 = MATLAB_RADIAL
+    p1, p2 = MATLAB_TANGENTIAL
+
+    camera_matrix = np.array(
+        [
+            [fx, 0.0, cx],
+            [0.0, fy, cy],
+            [0.0, 0.0, 1.0],
+        ],
+        dtype=np.float64,
+    )
+    dist_coeffs = np.array([[k1, k2, p1, p2, 0.0]], dtype=np.float64)
+    image_size_hw = (int(MATLAB_IMAGE_SIZE[0]), int(MATLAB_IMAGE_SIZE[1]))
+    return camera_matrix, dist_coeffs, image_size_hw
+
+
+def load_calibration(args: argparse.Namespace) -> tuple[np.ndarray, np.ndarray, tuple[int, int] | None]:
+    if args.use_matlab_intrinsics:
+        return matlab_intrinsics_to_opencv()
+
+    if not args.camera_matrix or not args.dist_coeffs:
+        raise ValueError(
+            "Provide both --camera-matrix and --dist-coeffs, or pass --use-matlab-intrinsics"
+        )
+
+    camera_matrix = np.load(args.camera_matrix)
+    dist_coeffs = np.load(args.dist_coeffs)
+
+    if dist_coeffs.ndim == 1:
+        dist_coeffs = dist_coeffs.reshape(1, -1)
+
+    return camera_matrix, dist_coeffs, None
+
+
+def detect_pose(
+    frame: np.ndarray,
+    detector: cv2.aruco.ArucoDetector,
+    camera_matrix: np.ndarray,
+    dist_coeffs: np.ndarray,
+    marker_size_m: float,
+) -> PoseEstimate | None:
+    corners, ids, _ = detector.detectMarkers(frame)
+    if ids is None or len(ids) == 0:
+        return None
+
+    cv2.aruco.drawDetectedMarkers(frame, corners, ids)
+    rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
+        corners, marker_size_m, camera_matrix, dist_coeffs
+    )
+
+    idx = 0
+    marker_id = int(ids[idx][0])
+    rvec = rvecs[idx][0]
+    tvec = tvecs[idx][0]
+
+    cv2.drawFrameAxes(frame, camera_matrix, dist_coeffs, rvec, tvec, marker_size_m * 0.5)
+    return PoseEstimate(marker_id=marker_id, rvec=rvec, tvec=tvec)
+
+
+def annotate(frame: np.ndarray, raw_pos: np.ndarray | None, filt_pos: np.ndarray) -> None:
+    y = 30
+    if raw_pos is not None:
+        cv2.putText(
+            frame,
+            f"raw xyz(m): [{raw_pos[0]: .2f}, {raw_pos[1]: .2f}, {raw_pos[2]: .2f}]",
+            (10, y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 255, 0),
+            2,
+        )
+        y += 25
+
+    cv2.putText(
+        frame,
+        f"kf  xyz(m): [{filt_pos[0]: .2f}, {filt_pos[1]: .2f}, {filt_pos[2]: .2f}]",
+        (10, y),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.6,
+        (255, 255, 0),
+        2,
+    )
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--camera-id", type=int, default=0)
+    parser.add_argument("--marker-size", type=float, required=True, help="Marker size in meters")
+    parser.add_argument("--dict", default="DICT_4X4_50", choices=sorted(ARUCO_DICT_MAP))
+    parser.add_argument("--camera-matrix", help="Path to camera_matrix .npy")
+    parser.add_argument("--dist-coeffs", help="Path to dist_coeffs .npy")
+    parser.add_argument(
+        "--use-matlab-intrinsics",
+        action="store_true",
+        help="Use the MATLAB cameraIntrinsics values provided by the user",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    camera_matrix, dist_coeffs, calibration_image_size = load_calibration(args)
+
+    dictionary = cv2.aruco.getPredefinedDictionary(ARUCO_DICT_MAP[args.dict])
+    parameters = cv2.aruco.DetectorParameters()
+    detector = cv2.aruco.ArucoDetector(dictionary, parameters)
+
+    cap = cv2.VideoCapture(args.camera_id)
+    if not cap.isOpened():
+        raise RuntimeError(f"Could not open camera {args.camera_id}")
+
+    kf = build_kalman_filter()
+    last_t = time.time()
+
+    warned_size_mismatch = False
+
+    try:
+        while True:
+            ok, frame = cap.read()
+            if not ok:
+                break
+
+            if calibration_image_size is not None and not warned_size_mismatch:
+                h, w = frame.shape[:2]
+                if (h, w) != calibration_image_size:
+                    print(
+                        "WARNING: camera resolution does not match calibration image size "
+                        f"(live={(h, w)}, calib={calibration_image_size})."
+                    )
+                    warned_size_mismatch = True
+
+            now = time.time()
+            dt = max(now - last_t, 1e-3)
+            last_t = now
+
+            kf.transitionMatrix[0, 3] = dt
+            kf.transitionMatrix[1, 4] = dt
+            kf.transitionMatrix[2, 5] = dt
+
+            pred = kf.predict()
+            filtered = pred[:3].reshape(3)
+            raw_pos = None
+
+            pose = detect_pose(frame, detector, camera_matrix, dist_coeffs, args.marker_size)
+            if pose is not None:
+                raw_pos = pose.tvec.astype(np.float32)
+                corrected = kf.correct(raw_pos.reshape(3, 1))
+                filtered = corrected[:3].reshape(3)
+                cv2.putText(
+                    frame,
+                    f"id: {pose.marker_id}",
+                    (10, frame.shape[0] - 20),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (255, 255, 255),
+                    2,
+                )
+
+            annotate(frame, raw_pos, filtered)
+            cv2.imshow("Aruco + Kalman", frame)
+
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
+    finally:
+        cap.release()
+        cv2.destroyAllWindows()
+
+
+if __name__ == "__main__":
+    main()
