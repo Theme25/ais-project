@@ -95,3 +95,15 @@ In this repo, the transform-tree replacement is located in `transform_tree.py`:
 ## C++ Kalman boundary
 
 Per your requirement, Python returns measurement outputs (`arucoPos`) and your C++ side should consume them for Kalman prediction/correction.
+
+## Run unit tests on GitHub automatically
+
+This repo includes a GitHub Actions workflow at `.github/workflows/python-tests.yml`.
+It runs on each push and pull request, installs dependencies from `requirements.txt`,
+and executes:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+You can view results in **GitHub -> Actions**.
