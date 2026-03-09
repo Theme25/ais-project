@@ -4,7 +4,20 @@ from unittest.mock import patch
 import numpy as np
 
 from detect_goal import detectGoal
-from transform_tree import initTree
+from transform_tree import initTree, make_transform
+
+
+MATLAB_CAMERA_POS = np.array([0.1, 0.0, 0.0])
+MATLAB_CAMERA_OR = np.array([np.pi / 2.0, np.pi, 0.0])
+MATLAB_CAMERA_MATRIX = np.array(
+    [
+        [603.816409588989, 0.0, 388.676982266589],
+        [0.0, 600.17202631038163, 240.555861086624],
+        [0.0, 0.0, 1.0],
+    ],
+    dtype=np.float64,
+)
+MATLAB_DIST_COEFFS = np.array([[0.043102806701415232, -0.1082637934138599, 0.0, 0.0, 0.0]], dtype=np.float64)
 
 
 class _FakeDetector:
@@ -18,7 +31,7 @@ class _FakeDetector:
 
 class DetectGoalTests(unittest.TestCase):
     def test_no_detection_sentinel_outputs(self):
-        tree = initTree(np.zeros(3), np.zeros(3), np.zeros(3), np.zeros(3))
+        tree = initTree(MATLAB_CAMERA_POS, MATLAB_CAMERA_OR, np.zeros(3), np.zeros(3))
 
         with patch("detect_goal._aruco_detector", return_value=_FakeDetector([], None)):
             ids, aruco_pos = detectGoal(
@@ -26,8 +39,8 @@ class DetectGoalTests(unittest.TestCase):
                 tree=tree,
                 posUAV=np.zeros(3),
                 orUAV=np.zeros(3),
-                cameraMatrix=np.eye(3),
-                distCoeffs=np.zeros(5),
+                cameraMatrix=MATLAB_CAMERA_MATRIX,
+                distCoeffs=MATLAB_DIST_COEFFS,
             )
 
         self.assertEqual(ids.shape, (1, 1))
@@ -36,7 +49,7 @@ class DetectGoalTests(unittest.TestCase):
         np.testing.assert_allclose(aruco_pos, np.zeros((3, 1)))
 
     def test_marker_101_updates_goal_path(self):
-        tree = initTree(np.zeros(3), np.zeros(3), np.zeros(3), np.zeros(3))
+        tree = initTree(MATLAB_CAMERA_POS, MATLAB_CAMERA_OR, np.zeros(3), np.zeros(3))
 
         corners = [np.zeros((1, 4, 2), dtype=np.float32)]
         ids = np.array([[101]], dtype=np.int32)
@@ -51,12 +64,17 @@ class DetectGoalTests(unittest.TestCase):
                 tree=tree,
                 posUAV=np.zeros(3),
                 orUAV=np.zeros(3),
-                cameraMatrix=np.eye(3),
-                distCoeffs=np.zeros(5),
+                cameraMatrix=MATLAB_CAMERA_MATRIX,
+                distCoeffs=MATLAB_DIST_COEFFS,
             )
 
         np.testing.assert_allclose(out_ids, [[101.0]])
-        np.testing.assert_allclose(out_pos[:, 0], [1.0, 2.0, 3.0])
+        expected_tf = (
+            make_transform(np.zeros(3), np.zeros(3))
+            @ make_transform(MATLAB_CAMERA_POS, MATLAB_CAMERA_OR)
+            @ make_transform(np.array([1.0, 2.0, 3.0]), np.zeros(3))
+        )
+        np.testing.assert_allclose(out_pos[:, 0], expected_tf[:3, 3])
         self.assertEqual(tree.pathToGoal.ids[2], "101")
 
     def test_marker_position_uses_nontrivial_uav_cam_chain(self):

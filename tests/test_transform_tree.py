@@ -5,6 +5,10 @@ import numpy as np
 from transform_tree import apply_chain, initTree, make_transform, updateTreeAfter
 
 
+MATLAB_CAMERA_POS = np.array([0.1, 0.0, 0.0])
+MATLAB_CAMERA_OR = np.array([np.pi / 2.0, np.pi, 0.0])
+
+
 class TransformTreeTests(unittest.TestCase):
     def test_init_tree_layout(self):
         tree = initTree(
@@ -20,7 +24,7 @@ class TransformTreeTests(unittest.TestCase):
         np.testing.assert_allclose(tree.pathToGoal.tfs[1][:3, 3], [1.0, 2.0, 3.0])
 
     def test_update_tree_after_updates_cam_child(self):
-        tree = initTree(np.zeros(3), np.zeros(3), np.zeros(3), np.zeros(3))
+        tree = initTree(MATLAB_CAMERA_POS, MATLAB_CAMERA_OR, np.zeros(3), np.zeros(3))
 
         updateTreeAfter(
             tree.pathToGoal,
