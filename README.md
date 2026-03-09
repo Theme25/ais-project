@@ -51,7 +51,7 @@ This follows MATLAB coder-like array orientation more closely than row-wise Pyth
 ## Install
 
 ```bash
-pip install "opencv-contrib-python==4.11.*" numpy
+pip install -r requirements.txt
 ```
 
 ## Minimal usage
@@ -70,8 +70,8 @@ cameraMatrix = np.array([
 
 distCoeffs = np.array([[0.043102806701415232, -0.1082637934138599, 0.0, 0.0, 0.0]], dtype=np.float64)
 
-posCam = np.array([0.0, 0.0, 0.0])
-orCam = np.array([0.0, 0.0, 0.0])
+posCam = np.array([0.1, 0.0, 0.0])
+orCam = np.array([np.pi / 2.0, np.pi, 0.0])
 posUAV = np.array([0.0, 0.0, 0.0])
 orUAV = np.array([0.0, 0.0, 0.0])
 
@@ -95,3 +95,28 @@ In this repo, the transform-tree replacement is located in `transform_tree.py`:
 ## C++ Kalman boundary
 
 Per your requirement, Python returns measurement outputs (`arucoPos`) and your C++ side should consume them for Kalman prediction/correction.
+
+
+## Marker ID routing behavior
+
+`detectGoal(...)` currently routes only these marker IDs:
+- `101` -> `pathToGoal`
+- `102` -> `pathToStart`
+
+Any other marker ID is treated as unknown, emits a runtime warning, and returns
+identity-chain output for that marker (position `[0, 0, 0]` in the current behavior).
+
+Internally, transform-tree node labels use MATLAB-style 3-character IDs (`_id3`),
+so labels longer than 3 characters are truncated by design for compatibility.
+
+## Run unit tests on GitHub automatically
+
+This repo includes a GitHub Actions workflow at `.github/workflows/python-tests.yml`.
+It runs on each push and pull request, installs dependencies from `requirements.txt`,
+and executes:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+You can view results in **GitHub -> Actions**.

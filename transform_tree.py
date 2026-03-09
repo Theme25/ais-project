@@ -101,7 +101,11 @@ def _set_id(path: Any, idx: int, node_id: str) -> None:
 
 
 def _id3(node_id: str) -> str:
-    """Match MATLAB-generated 3-char ID behavior (pad/truncate to 3)."""
+    """Match MATLAB-generated 3-char ID behavior (pad/truncate to 3).
+
+    Note: IDs longer than 3 characters intentionally collide with their first
+    3 chars (e.g., "1010" -> "101") to preserve MATLAB-generated semantics.
+    """
     return (node_id + "   ")[:3]
 
 
@@ -198,6 +202,8 @@ def path_for_marker(tree: Any, marker_id: int) -> Any | None:
 
 
 def init_default_tree() -> TransformTree:
-    """Convenience init with zero poses for camera and UAV."""
+    """Convenience init with MATLAB camera defaults and zero UAV pose."""
+    pos_cam = np.array([0.1, 0.0, 0.0], dtype=np.float64)
+    or_cam = np.array([np.pi / 2.0, np.pi, 0.0], dtype=np.float64)
     zeros = np.zeros(3, dtype=np.float64)
-    return initTree(posCam=zeros, orCam=zeros, posUAV=zeros, orUAV=zeros)
+    return initTree(posCam=pos_cam, orCam=or_cam, posUAV=zeros, orUAV=zeros)

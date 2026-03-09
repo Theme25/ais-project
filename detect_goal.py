@@ -9,6 +9,7 @@ This file focuses on one responsibility:
 from __future__ import annotations
 
 from dataclasses import dataclass
+import warnings
 from typing import Any
 
 import cv2
@@ -20,6 +21,20 @@ from transform_tree import apply_chain, path_for_marker, updateTreeAfter, update
 
 # Project requirement: standard ArUco marker is 15 cm.
 MARKER_SIZE_M = 0.15
+
+
+def _marker_object_points(marker_size_m: float = MARKER_SIZE_M) -> np.ndarray:
+    """Return 3D corner points for a square marker centered at origin."""
+    half = marker_size_m / 2.0
+    return np.array(
+        [
+            [-half, half, 0.0],
+            [half, half, 0.0],
+            [half, -half, 0.0],
+            [-half, -half, 0.0],
+        ],
+        dtype=np.float64,
+    )
 
 
 @dataclass
@@ -105,21 +120,26 @@ def detectGoal(
     ids_flat = ids.flatten().astype(np.int32)
     ids_out = ids_flat.reshape(1, -1).astype(np.float64)
 
-    # Pose estimate for each detected marker.
-    rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
-        corners,
-        MARKER_SIZE_M,
-        cameraMatrix,
-        distCoeffs,
-    )
+    object_points = _marker_object_points(MARKER_SIZE_M)
 
     # MATLAB output shape: 3 x N.
     aruco_pos = np.zeros((3, len(ids_flat)), dtype=np.float64)
 
     for i, marker_id in enumerate(ids_flat):
+        image_points = np.asarray(corners[i][0], dtype=np.float64)
+        ok, rvec, tvec = cv2.solvePnP(
+            object_points,
+            image_points,
+            cameraMatrix,
+            distCoeffs,
+            flags=cv2.SOLVEPNP_IPPE_SQUARE,
+        )
+        if not ok:
+            warnings.warn(f"solvePnP failed for marker {int(marker_id)}", RuntimeWarning)
+            continue
+
         # Rotation and translation of marker in camera frame.
-        rvec = rvecs[i][0]
-        tvec = tvecs[i][0].astype(np.float64)
+        tvec = np.asarray(tvec, dtype=np.float64).reshape(3)
 
         # Convert OpenCV Rodrigues vector to rotation matrix then to ZYX Euler.
         rotm, _ = cv2.Rodrigues(rvec)
@@ -131,6 +151,10 @@ def detectGoal(
 
         if path is None:
             # Unknown ID: keep identity (same behavior as default branch in reference).
+            warnings.warn(
+                f"Unknown marker id {int(marker_id)} (supported: 101=>goal, 102=>start)",
+                RuntimeWarning,
+            )
             transform = np.eye(4, dtype=np.float64)
         else:
             # Update marker node then compose full transform chain.

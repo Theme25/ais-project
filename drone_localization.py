@@ -134,7 +134,7 @@ def detect_pose(
     dist_coeffs: np.ndarray,
     marker_size_m: float,
 ) -> PoseEstimate | None:
-    """Detect first ArUco marker and estimate its pose."""
+    """Detect first ArUco marker and estimate its pose with solvePnP."""
     corners, ids, _ = detector.detectMarkers(frame)
     if ids is None or len(ids) == 0:
         return None
@@ -142,19 +142,32 @@ def detect_pose(
     # Draw marker borders and IDs for visualization.
     cv2.aruco.drawDetectedMarkers(frame, corners, ids)
 
-    # Pose estimation for each detected marker.
-    rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
-        corners,
-        marker_size_m,
-        camera_matrix,
-        dist_coeffs,
+    half = marker_size_m / 2.0
+    object_points = np.array(
+        [
+            [-half, half, 0.0],
+            [half, half, 0.0],
+            [half, -half, 0.0],
+            [-half, -half, 0.0],
+        ],
+        dtype=np.float64,
     )
 
     # Demo picks the first marker only.
     idx = 0
     marker_id = int(ids[idx][0])
-    rvec = rvecs[idx][0]
-    tvec = tvecs[idx][0]
+    image_points = np.asarray(corners[idx][0], dtype=np.float64)
+    ok, rvec, tvec = cv2.solvePnP(
+        object_points,
+        image_points,
+        camera_matrix,
+        dist_coeffs,
+        flags=cv2.SOLVEPNP_IPPE_SQUARE,
+    )
+    if not ok:
+        return None
+
+    tvec = np.asarray(tvec, dtype=np.float64).reshape(3)
 
     # Draw local axes on top of marker for debugging orientation.
     cv2.drawFrameAxes(frame, camera_matrix, dist_coeffs, rvec, tvec, marker_size_m * 0.5)
