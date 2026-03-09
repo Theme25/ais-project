@@ -96,6 +96,18 @@ In this repo, the transform-tree replacement is located in `transform_tree.py`:
 
 Per your requirement, Python returns measurement outputs (`arucoPos`) and your C++ side should consume them for Kalman prediction/correction.
 
+## Marker ID routing behavior
+
+`detectGoal(...)` currently routes only these marker IDs:
+- `101` → `pathToGoal`
+- `102` → `pathToStart`
+
+Any other marker ID is treated as unknown, emits a `RuntimeWarning`, and returns
+identity-chain output for that marker (position `[0, 0, 0]`).
+
+Internally, transform-tree node labels use MATLAB-style 3-character IDs (`_id3`),
+so labels longer than 3 characters are truncated by design for compatibility.
+
 ## Run unit tests on GitHub automatically
 
 This repo includes a GitHub Actions workflow at `.github/workflows/python-tests.yml`.
