@@ -51,7 +51,7 @@ This follows MATLAB coder-like array orientation more closely than row-wise Pyth
 ## Install
 
 ```bash
-pip install "opencv-contrib-python==4.11.*" numpy
+pip install -r requirements.txt
 ```
 
 ## Minimal usage
