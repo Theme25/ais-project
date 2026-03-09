@@ -101,7 +101,11 @@ def _set_id(path: Any, idx: int, node_id: str) -> None:
 
 
 def _id3(node_id: str) -> str:
-    """Match MATLAB-generated 3-char ID behavior (pad/truncate to 3)."""
+    """Match MATLAB-generated 3-char ID behavior (pad/truncate to 3).
+
+    Note: IDs longer than 3 characters intentionally collide with their first
+    3 chars (e.g., "1010" -> "101") to preserve MATLAB-generated semantics.
+    """
     return (node_id + "   ")[:3]
 
 
