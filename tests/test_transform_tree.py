@@ -32,17 +32,19 @@ class TransformTreeTests(unittest.TestCase):
         self.assertEqual(tree.pathToGoal.ids[2], "101")
         np.testing.assert_allclose(tree.pathToGoal.tfs[2][:3, 3], [0.1, 0.2, 0.3])
 
-    def test_apply_chain_order(self):
+    def test_apply_chain_order_with_rotation(self):
         path = {
             "ids": ["A", "B", "C"],
             "tfs": [
-                make_transform(np.array([1.0, 0.0, 0.0]), np.zeros(3)),
-                make_transform(np.array([0.0, 2.0, 0.0]), np.zeros(3)),
-                make_transform(np.array([0.0, 0.0, 3.0]), np.zeros(3)),
+                make_transform(np.array([1.0, 0.0, 0.0]), np.array([np.pi / 2, 0.0, 0.0])),
+                make_transform(np.array([2.0, 0.0, 0.0]), np.zeros(3)),
+                make_transform(np.array([0.0, 1.0, 0.0]), np.zeros(3)),
             ],
         }
         composed = apply_chain(path)
-        np.testing.assert_allclose(composed[:3, 3], [1.0, 2.0, 3.0])
+        expected = path["tfs"][0] @ path["tfs"][1] @ path["tfs"][2]
+        np.testing.assert_allclose(composed, expected)
+        self.assertFalse(np.allclose(composed[:3, 3], [3.0, 1.0, 0.0]))
 
 
 if __name__ == "__main__":
