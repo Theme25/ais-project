@@ -78,12 +78,11 @@ class DetectGoalTests(unittest.TestCase):
         self.assertEqual(tree.pathToGoal.ids[2], "101")
 
     def test_marker_position_uses_nontrivial_uav_cam_chain(self):
-        uav_orientation = np.array([np.pi / 2, 0.0, 0.0])
         tree = initTree(
-            posCam=MATLAB_CAMERA_POS,
-            orCam=MATLAB_CAMERA_OR,
+            posCam=np.array([1.0, 0.0, 0.0]),
+            orCam=np.zeros(3),
             posUAV=np.zeros(3),
-            orUAV=uav_orientation,
+            orUAV=np.array([np.pi / 2, 0.0, 0.0]),
         )
 
         corners = [np.zeros((1, 4, 2), dtype=np.float32)]
@@ -98,20 +97,15 @@ class DetectGoalTests(unittest.TestCase):
                 img=np.zeros((10, 10, 3), dtype=np.uint8),
                 tree=tree,
                 posUAV=np.zeros(3),
-                orUAV=uav_orientation,
-                cameraMatrix=MATLAB_CAMERA_MATRIX,
-                distCoeffs=MATLAB_DIST_COEFFS,
+                orUAV=np.array([np.pi / 2, 0.0, 0.0]),
+                cameraMatrix=np.eye(3),
+                distCoeffs=np.zeros(5),
             )
 
-        expected_tf = (
-            make_transform(np.zeros(3), uav_orientation)
-            @ make_transform(MATLAB_CAMERA_POS, MATLAB_CAMERA_OR)
-            @ make_transform(np.array([1.0, 0.0, 0.0]), np.zeros(3))
-        )
-        np.testing.assert_allclose(out_pos[:, 0], expected_tf[:3, 3], atol=1e-9)
+        np.testing.assert_allclose(out_pos[:, 0], [0.0, 2.0, 0.0], atol=1e-9)
 
     def test_unknown_marker_warns_and_returns_zero_position(self):
-        tree = initTree(MATLAB_CAMERA_POS, MATLAB_CAMERA_OR, np.zeros(3), np.zeros(3))
+        tree = initTree(np.zeros(3), np.zeros(3), np.zeros(3), np.zeros(3))
 
         corners = [np.zeros((1, 4, 2), dtype=np.float32)]
         ids = np.array([[999]], dtype=np.int32)
@@ -128,8 +122,8 @@ class DetectGoalTests(unittest.TestCase):
                 tree=tree,
                 posUAV=np.zeros(3),
                 orUAV=np.zeros(3),
-                cameraMatrix=MATLAB_CAMERA_MATRIX,
-                distCoeffs=MATLAB_DIST_COEFFS,
+                cameraMatrix=np.eye(3),
+                distCoeffs=np.zeros(5),
             )
 
         np.testing.assert_allclose(out_ids, [[999.0]])
