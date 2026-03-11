@@ -1,0 +1,22 @@
+name: C++ Kalman Filter Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S cpp -B build/cpp -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build/cpp --parallel
+
+      - name: Run tests
+        run: ctest --test-dir build/cpp --output-on-failure
