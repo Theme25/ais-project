@@ -78,11 +78,30 @@ void DronePoseKalmanFilter::predict(double dt_seconds) {
         }
     }
 
-    // Constant process noise model
+    // Constant-velocity process noise model (discrete time), with
+    // position/velocity cross-correlation terms.
+    //
+    // For each axis [p, v], we add:
+    // [ q_p*dt^3/3      q_p*dt^2/2 ]
+    // [ q_p*dt^2/2      q_v*dt     ]
+    //
+    // This avoids the filter becoming overconfident in velocity.
     const double dt2 = dt_seconds * dt_seconds;
+    const double dt3 = dt2 * dt_seconds;
     for (int i = 0; i < 3; ++i) {
-        mat(nextP, i, i) += process_position_noise_ * dt2;
+        mat(nextP, i,     i)     += process_position_noise_ * dt3 / 3.0;
         mat(nextP, i + 3, i + 3) += process_velocity_noise_ * dt_seconds;
+        mat(nextP, i,     i + 3) += process_position_noise_ * dt2 / 2.0;
+        mat(nextP, i + 3, i)     += process_position_noise_ * dt2 / 2.0;
+    }
+
+    // Enforce symmetry to reduce numerical drift over long runs.
+    for (int r = 0; r < 6; ++r) {
+        for (int c = r + 1; c < 6; ++c) {
+            const double avg = 0.5 * (matc(nextP, r, c) + matc(nextP, c, r));
+            mat(nextP, r, c) = avg;
+            mat(nextP, c, r) = avg;
+        }
     }
 
     P_ = nextP;
@@ -90,11 +109,15 @@ void DronePoseKalmanFilter::predict(double dt_seconds) {
 
 void DronePoseKalmanFilter::updateWithDronePosition(const std::array<double, 3>& position,
                                                     double position_variance) {
+    // Intentionally shares the same position-only measurement model as camera updates.
+    // Sensor trust is configured by the caller via `position_variance`.
     updatePositionMeasurement(position, position_variance);
 }
 
 void DronePoseKalmanFilter::updateWithCameraArucoPosition(const std::array<double, 3>& position,
                                                           double position_variance) {
+    // Intentionally shares the same position-only measurement model as drone updates.
+    // Sensor trust is configured by the caller via `position_variance`.
     updatePositionMeasurement(position, position_variance);
 }
 

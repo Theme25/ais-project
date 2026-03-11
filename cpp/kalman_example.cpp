@@ -18,7 +18,9 @@ int main() {
         auto cmp = kf.compareMeasurements(drone_pos, cam_pos);
         std::cout << "measurement residual norm: " << cmp.residual_norm << "\n";
 
-        // Drone estimator is trusted more than camera in this toy setup.
+        // Variances are in meters^2.
+        // In production, tune these from measured sensor error statistics.
+        // Here, drone telemetry is trusted more than camera ArUco estimates.
         kf.updateWithDronePosition(drone_pos, 0.01);
         kf.updateWithCameraArucoPosition(cam_pos, 0.04);
 
