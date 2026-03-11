@@ -89,10 +89,10 @@ void DronePoseKalmanFilter::predict(double dt_seconds) {
     const double dt2 = dt_seconds * dt_seconds;
     const double dt3 = dt2 * dt_seconds;
     for (int i = 0; i < 3; ++i) {
-        mat(nextP, i,     i)     += process_position_noise_ * dt3 / 3.0;
+        mat(nextP, i, i) += process_position_noise_ * dt3 / 3.0;
         mat(nextP, i + 3, i + 3) += process_velocity_noise_ * dt_seconds;
-        mat(nextP, i,     i + 3) += process_position_noise_ * dt2 / 2.0;
-        mat(nextP, i + 3, i)     += process_position_noise_ * dt2 / 2.0;
+        mat(nextP, i, i + 3) += process_position_noise_ * dt2 / 2.0;
+        mat(nextP, i + 3, i) += process_position_noise_ * dt2 / 2.0;
     }
 
     // Enforce symmetry to reduce numerical drift over long runs.
