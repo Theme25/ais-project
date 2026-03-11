@@ -123,7 +123,7 @@ You can view results in **GitHub -> Actions**.
 
 ## New C++ Kalman starter (drone vs ArUco position fusion)
 
-A minimal C++ implementation is included at the repository root:
+A minimal C++ implementation is included under `cpp/`:
 
 - `kalman_filter.hpp/.cpp`: 6-state constant-velocity Kalman filter (`[px, py, pz, vx, vy, vz]`)
 - `compareMeasurements(...)`: explicit residual between drone-reported and camera/Aruco position
@@ -133,11 +133,9 @@ A minimal C++ implementation is included at the repository root:
 Build and run:
 
 ```bash
-cmake -S . -B build/cpp
+cmake -S cpp -B build/cpp
 cmake --build build/cpp
 ./build/cpp/kalman_example
 ```
 
 This gives you a practical starting point to wire your incoming drone position telemetry and camera-derived ArUco position into a single fused estimate in C++.
-
-Small maintenance update: this commit is intentionally minimal to trigger CI/test execution.
