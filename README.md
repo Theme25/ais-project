@@ -139,5 +139,3 @@ cmake --build build/cpp
 ```
 
 This gives you a practical starting point to wire your incoming drone position telemetry and camera-derived ArUco position into a single fused estimate in C++.
-
-Small maintenance update: this commit is intentionally minimal to trigger CI/test execution.
